@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Jezza Tips</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(180deg, #0b1c2d 0%, #10283f 100%);
+      color: #0b1c2d;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+    .app {
+      width: 100%;
+      max-width: 420px;
+      min-height: 100vh;
+      box-sizing: border-box;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    header {
+      background: white;
+      border-radius: 16px;
+      padding: 16px;
+      text-align: center;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+    }
+    .icon { font-size: 36px; }
+    h1 { margin: 6px 0 4px 0; font-size: 26px; color: #0b1c2d; }
+    .round { font-size: 16px; color: #445b6f; }
+
+    .controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .controls button, .controls select {
+      font-size: 16px;
+      padding: 12px;
+      border-radius: 12px;
+      border: none;
+      cursor: pointer;
+    }
+    .controls select {
+      background: #ffffff;
+      color: #0b1c2d;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    }
+    .controls button {
+      background: #0b3a66;
+      color: white;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+    }
+    .controls button.secondary { background: #1c4f7a; }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .game {
+      background: white;
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .date {
+      font-size: 13px;
+      color: #6a7f92;
+      text-align: center;
+    }
+    .teams {
+      display: flex;
+      justify-content: space-between;
+      font-size: 18px;
+      font-weight: 600;
+      color: #0b1c2d;
+    }
+    .probs {
+      display: flex;
+      justify-content: space-between;
+      font-size: 15px;
+      color: #1c3f5c;
+    }
+    .pick {
+      margin-top: 6px;
+      padding: 10px;
+      border-radius: 10px;
+      background: #0b3a66;
+      text-align: center;
+      font-size: 16px;
+      font-weight: 600;
+      color: #ffffff;
+    }
+    .insights {
+      margin-top: 6px;
+      padding: 10px;
+      border-radius: 10px;
+      background: #eef4f9;
+      font-size: 14px;
+      color: #1c3f5c;
+    }
+
+    .footer {
+      margin-top: auto;
+      text-align: center;
+      font-size: 13px;
+      color: #c9d6df;
+      padding-bottom: 8px;
+    }
+    .loading {
+      text-align: center;
+      font-size: 18px;
+      margin-top: 20px;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header>
+      <div class="icon">🏉</div>
+      <h1>Jezza Tips</h1>
+      <div class="round" id="roundInfo">Loading…</div>
+    </header>
+
+    <div class="controls">
+      <select id="roundSelect"></select>
+      <button id="refreshBtn">Refresh</button>
+      <button class="secondary" id="scrollTopBtn">Top</button>
+      <button class="secondary" id="todayBtn">Current</button>
+    </div>
+
+    <div id="content" class="list"></div>
+
+    <div class="footer">
+      Data from Squiggle • Your private tips app
+    </div>
+  </div>
+
+  <script>
+    const contentDiv = document.getElementById("content");
+    const roundInfoDiv = document.getElementById("roundInfo");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const scrollTopBtn = document.getElementById("scrollTopBtn");
+    const todayBtn = document.getElementById("todayBtn");
+    const roundSelect = document.getElementById("roundSelect");
+
+    const year = new Date().getFullYear();
+    let selectedRound = null;
+
+    scrollTopBtn.addEventListener("click", () => window.scrollTo({ top: 0, behavior: "smooth" }));
+    refreshBtn.addEventListener("click", () => { if (selectedRound !== null) loadRound(selectedRound); });
+    todayBtn.addEventListener("click", async () => { await init(); });
+
+    roundSelect.addEventListener("change", () => {
+      const val = parseInt(roundSelect.value, 10);
+      selectedRound = val;
+      loadRound(val);
+    });
+
+    function setLoading(msg) {
+      contentDiv.innerHTML = `<div class="loading">${msg}</div>`;
+      roundInfoDiv.textContent = msg;
+    }
+
+    function labelForRound(r) { return r === 0 ? "Opening Round" : `Round ${r}`; }
+
+    function buildRoundOptions(maxRound, defaultRound) {
+      roundSelect.innerHTML = "";
+      const opt0 = document.createElement("option");
+      opt0.value = "0"; opt0.textContent = "Opening Round";
+      roundSelect.appendChild(opt0);
+      for (let r = 1; r <= maxRound; r++) {
+        const opt = document.createElement("option");
+        opt.value = String(r); opt.textContent = `Round ${r}`;
+        roundSelect.appendChild(opt);
+      }
+      roundSelect.value = String(defaultRound);
+    }
+
+    async function fetchUpcomingRound() {
+      const res = await fetch(`https://api.squiggle.com.au/?q=games;year=${year};complete=0`);
+      const data = await res.json();
+      const games = data.games || [];
+      if (games.length === 0) return 1;
+      return games[0].round;
+    }
+
+    async function fetchMaxRound() {
+      const res = await fetch(`https://api.squiggle.com.au/?q=games;year=${year}`);
+      const data = await res.json();
+      const games = data.games || [];
+      let max = 1;
+      games.forEach(g => { if (typeof g.round === "number") max = Math.max(max, g.round); });
+      return max;
+    }
+
+    function formatDate(iso) {
+      if (!iso) return "Date TBA";
+      const d = new Date(iso);
+      return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+    }
+
+    async function loadRound(round) {
+      try {
+        setLoading("Loading tips…");
+        selectedRound = round;
+        const roundLabel = labelForRound(round);
+        roundInfoDiv.textContent = `${roundLabel} • ${year}`;
+
+        const gamesRes = await fetch(`https://api.squiggle.com.au/?q=games;year=${year};round=${round}`);
+        const gamesData = await gamesRes.json();
+        const games = gamesData.games || [];
+        if (games.length === 0) {
+          contentDiv.innerHTML = `<div class="loading">No games found for ${roundLabel}.</div>`;
+          return;
+        }
+
+        const tipsRes = await fetch(`https://api.squiggle.com.au/?q=tips;year=${year};round=${round}`);
+        const tipsData = await tipsRes.json();
+        const tips = tipsData.tips || [];
+
+        const tipsByGame = {};
+        tips.forEach(t => {
+          if (!tipsByGame[t.gameid]) tipsByGame[t.gameid] = [];
+          tipsByGame[t.gameid].push(t);
+        });
+
+        contentDiv.innerHTML = "";
+
+        games.forEach(game => {
+          const home = game.hteam;
+          const away = game.ateam;
+
+          let homeProb = null, awayProb = null, insight = "";
+
+          const gameTips = tipsByGame[game.id] || [];
+          let chosenTip = gameTips.find(t => (t.source || "").toLowerCase() === "squiggle");
+
+          if (!chosenTip && gameTips.length > 0) {
+            chosenTip = gameTips.reduce((best, t) => {
+              if (typeof t.confidence === "number" && (!best || t.confidence > best.confidence)) return t;
+              return best;
+            }, null);
+            if (chosenTip) insight = "Using highest-confidence model from Squiggle sources.";
+          } else if (chosenTip) {
+            insight = "Using Squiggle’s own model probability.";
+          }
+
+          if (chosenTip && typeof chosenTip.confidence === "number") {
+            if (chosenTip.tip === home) {
+              homeProb = chosenTip.confidence; awayProb = 100 - homeProb;
+            } else if (chosenTip.tip === away) {
+              awayProb = chosenTip.confidence; homeProb = 100 - awayProb;
+            }
+          }
+
+          if (homeProb === null || awayProb === null) {
+            homeProb = 50; awayProb = 50;
+            insight = "No strong edge in the data for this match (effectively a coin flip).";
+          }
+
+          const pick = homeProb >= awayProb ? home : away;
+          const pickProb = Math.max(homeProb, awayProb).toFixed(0);
+
+          if (!insight) {
+            insight = `Model edge of ${pickProb}% towards ${pick}.`;
+          }
+
+          const gameDiv = document.createElement("div");
+          gameDiv.className = "game";
+          gameDiv.innerHTML = `
+            <div class="date">${formatDate(game.date)}</div>
+            <div class="teams">
+              <span>${home}</span>
+              <span>${away}</span>
+            </div>
+            <div class="probs">
+              <span>${home}: ${homeProb.toFixed(0)}%</span>
+              <span>${away}: ${awayProb.toFixed(0)}%</span>
+            </div>
+            <div class="pick">
+              Jezza picks: ${pick} (${pickProb}%)
+            </div>
+            <div class="insights">
+              <strong>Why:</strong> ${insight}
+            </div>
+          `;
+          contentDiv.appendChild(gameDiv);
+        });
+
+      } catch (err) {
+        console.error(err);
+        contentDiv.innerHTML = `<div class="loading">Error loading data. Try Refresh.</div>`;
+        roundInfoDiv.textContent = "Error";
+      }
+    }
+
+    async function init() {
+      try {
+        setLoading("Finding current round…");
+        const [upcoming, maxRound] = await Promise.all([ fetchUpcomingRound(), fetchMaxRound() ]);
+        buildRoundOptions(maxRound, upcoming);
+        await loadRound(upcoming);
+      } catch (e) {
+        console.error(e);
+        setLoading("Error initialising.");
+      }
+    }
+
+    init();
+  </script>
+</body>
+</html>
