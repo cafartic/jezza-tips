@@ -1,1 +1,1 @@
-# jezza-tips
+# jezza
