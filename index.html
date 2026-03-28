@@ -863,7 +863,6 @@ STEP 4: Respond ONLY with a single valid JSON object, no other text, no markdown
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 4000,
-        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }],
         system: 'You are Jezza5000, an AFL tipping assistant. After all research is complete, your FINAL message must be ONLY a valid JSON object with no preamble, explanation, or markdown. No backticks. Just raw JSON.',
         messages: [{ role: 'user', content: prompt }]
       })
