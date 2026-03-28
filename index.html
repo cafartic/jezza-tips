@@ -807,69 +807,27 @@ function clearTips() {
   document.getElementById('last-updated').textContent = 'AFL Tipping Assistant';
 }
 
-// SQUIGGLE — fetch via multiple strategies to handle CORS
-async function squiggleFetch(path) {
-  const target = `${SQUIGGLE}/?${path};year=${YEAR}`;
-  const proxies = [
-    url => url,
-    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    url => `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
-    url => `https://thingproxy.freeboard.io/fetch/${url}`,
-    url => `https://api.codetabs.com/v1/proxy?quest=${url}`
-  ];
-  for (const proxy of proxies) {
-    try {
-      const r = await fetch(proxy(target), {signal: AbortSignal.timeout(10000)});
-      if (!r.ok) continue;
-      const data = await r.json();
-      // allorigins wraps in {contents}
-      if (data && data.contents) return JSON.parse(data.contents);
-      // codetabs returns array or object directly
-      if (data && (data.games || data.tips || data.standings)) return data;
-      // direct response
-      if (data) return data;
-    } catch(e) { continue; }
-  }
-  throw new Error('Could not reach Squiggle API — try again or check connection');
-}
-
-// FIND CURRENT ROUND
-async function getCurrentRound() {
-  const data = await squiggleFetch('q=games');
-  const games = data.games || [];
-  const now = new Date();
-  const upcoming = games.filter(g => {
-    if (!g.date) return false;
-    return new Date(g.date) > new Date(now - 4*60*60*1000);
-  });
-  if (!upcoming.length) return null;
-  const rounds = [...new Set(upcoming.map(g => g.round))].sort((a,b)=>a-b);
-  return rounds[0];
-}
-
-// CLAUDE — cheap call, no web search, just Squiggle data in, JSON tips out
-async function claudeTips(games, squiggleTips, standings, round) {
+// CLAUDE — fetches Squiggle server-side (no CORS) then returns tips
+// Uses web_fetch tool only — NOT web_search, so no search costs
+async function fetchTipsFromClaude() {
   const apiKey = getApiKey();
   if (!apiKey) { showSetup(); throw new Error('No API key'); }
 
-  // Build compact data string — keep input tokens minimal
-  const gameLines = games.map((g, i) => {
-    const modelTips = squiggleTips.filter(t => t.gameid === g.id);
-    let consensus = 'unknown';
-    let avgMargin = null;
-    if (modelTips.length) {
-      const counts = {};
-      modelTips.forEach(t => { if(t.tip) counts[t.tip] = (counts[t.tip]||0)+1; });
-      const top = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
-      if (top) consensus = `${top[0]} ${top[1]}/${modelTips.length}`;
-      avgMargin = (modelTips.reduce((s,t)=>s+(parseFloat(t.margin)||0),0)/modelTips.length).toFixed(0);
-    }
-    return `G${i+1}:${g.hteam} v ${g.ateam}|${formatTime(g.date)}|${shortenVenue(g.venue)}|tip:${consensus}${avgMargin?'|margin:'+avgMargin:''}`;
-  }).join('\n');
+  const today = new Date().toLocaleDateString('en-AU', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
 
-  const ladderLines = (standings||[]).slice(0,10).map(s=>`${s.rank}.${s.team}`).join(' ');
+  const prompt = `Today is ${today}.
 
-  const prompt = `AFL Round ${round} ${YEAR}. Squiggle data:\n${gameLines}\nLadder top 10: ${ladderLines}\n\nTip each game. Use Squiggle consensus as primary signal. Ladder as tiebreaker. Conservative — tip favourites.\n\nJSON only, no other text:\n{"round":${round},"games":[{"home":"","away":"","tip":"","confidence":"High|Med|Low","reason":"<10 words","time":"","venue":""}],"game1_margin":0,"safest":[{"team":"","opp":"","reason":""},{"team":"","opp":"","reason":""},{"team":"","opp":"","reason":""}],"upset_watch":[{"matchup":"","reason":""},{"matchup":"","reason":""}],"itipfooty":[{"team":"","opp":"","conf":"H|M|L"}]}`;
+Fetch these 3 URLs and use the data to generate AFL tips:
+1. https://api.squiggle.com.au/?q=games;year=${YEAR}
+2. https://api.squiggle.com.au/?q=standings;year=${YEAR}
+
+From the games data, find the current round (earliest round with unplayed games as of today).
+Then fetch: https://api.squiggle.com.au/?q=tips;year=${YEAR};round=ROUND (replace ROUND with the round number).
+
+Using the Squiggle model consensus as primary signal and ladder position as tiebreaker, tip each unplayed game conservatively — favour the model consensus pick.
+
+Respond with ONLY this JSON, no other text, no markdown:
+{"round":1,"games":[{"home":"Team","away":"Team","tip":"Team","confidence":"High|Med|Low","reason":"under 10 words","time":"e.g. Sat 5 Apr 1:45pm","venue":"Venue"}],"game1_margin":14,"safest":[{"team":"Team","opp":"Team","reason":"word"},{"team":"Team","opp":"Team","reason":"word"},{"team":"Team","opp":"Team","reason":"word"}],"upset_watch":[{"matchup":"Team vs Team","reason":"one line"},{"matchup":"Team vs Team","reason":"one line"}],"itipfooty":[{"team":"Team","opp":"Team","conf":"H|M|L"}]}`;
 
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -881,8 +839,9 @@ async function claudeTips(games, squiggleTips, standings, round) {
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 600,
-      system: 'You are a JSON API. Output ONLY raw valid JSON. No text, no markdown, no backticks.',
+      max_tokens: 700,
+      tools: [{ type: 'web_fetch_20250124', name: 'web_fetch' }],
+      system: 'You are a JSON API. Fetch the requested URLs using your web_fetch tool, then output ONLY raw valid JSON. No text before or after. No markdown. No backticks.',
       messages: [{ role: 'user', content: prompt }]
     })
   });
@@ -899,7 +858,6 @@ async function claudeTips(games, squiggleTips, standings, round) {
   if (!textBlocks.length) throw new Error('No response from Claude');
   const raw = textBlocks[textBlocks.length-1].text.trim();
 
-  // Robust JSON extraction
   for (const fn of [
     () => JSON.parse(raw),
     () => JSON.parse(raw.replace(/^```json\s*|^```\s*|\s*```$/gm,'')),
@@ -913,37 +871,13 @@ async function claudeTips(games, squiggleTips, standings, round) {
 async function fetchTips() {
   if (!getApiKey()) { showSetup(); return; }
   renderSkeleton();
-  setStatus('Fetching Squiggle data\u2026', 'loading');
+  setStatus('Getting tips from Jezza\u2026', 'loading');
 
   try {
-    // Step 1: find current round
-    setStatus('Finding current round\u2026', 'loading');
-    const round = await getCurrentRound();
-    if (!round) throw new Error('No upcoming games found');
-
-    // Step 2: fetch games + tips + standings in parallel
-    setStatus(`Round ${round} \u2014 loading data\u2026`, 'loading');
-    const [gamesData, tipsData, standingsData] = await Promise.all([
-      squiggleFetch(`q=games;round=${round}`),
-      squiggleFetch(`q=tips;round=${round}`),
-      squiggleFetch('q=standings')
-    ]);
-
-    const games = (gamesData.games||[]).filter(g => !g.complete || g.complete < 100);
-    if (!games.length) {
-      setStatus('Round complete — no unplayed games.', 'error');
-      document.getElementById('content').innerHTML = `<div class="empty-state"><div class="empty-icon">\uD83C\uDFC1</div><div class="empty-title">Round Complete</div><div class="empty-sub">All games played. Check back next round.</div></div>`;
-      return;
-    }
-
-    // Step 3: ask Claude — cheap, no web search
-    setStatus('Getting tips from Jezza\u2026', 'loading');
-    const tips = await claudeTips(games, tipsData.tips||[], standingsData.standings||[], round);
-
+    const tips = await fetchTipsFromClaude();
     setStatus(`Round ${tips.round} tips ready`, 'success');
-    render(tips, games);
+    render(tips, []);
     setTimeout(()=>setStatus(''), 3000);
-
   } catch(err) {
     console.error(err);
     setStatus('Error: ' + err.message, 'error');
