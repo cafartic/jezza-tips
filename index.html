@@ -807,27 +807,44 @@ function clearTips() {
   document.getElementById('last-updated').textContent = 'AFL Tipping Assistant';
 }
 
-// CLAUDE — fetches Squiggle server-side (no CORS) then returns tips
-// Uses web_fetch tool only — NOT web_search, so no search costs
-async function fetchTipsFromClaude() {
+const PROXY = 'https://squiggle-proxy.cafarticnz.workers.dev';
+
+// SQUIGGLE via Cloudflare proxy (no CORS issues)
+async function squiggleFetch(path) {
+  const r = await fetch(`${PROXY}/?${path};year=${YEAR}`);
+  if (!r.ok) throw new Error(`Squiggle error ${r.status}`);
+  return r.json();
+}
+
+// FIND CURRENT ROUND
+async function getCurrentRound(games) {
+  const now = new Date();
+  const upcoming = games.filter(g => g.date && new Date(g.date) > new Date(now - 4*60*60*1000));
+  if (!upcoming.length) return null;
+  return [...new Set(upcoming.map(g => g.round))].sort((a,b)=>a-b)[0];
+}
+
+// CLAUDE — compact call, Squiggle data passed in, no tools
+async function claudeTips(games, squiggleTips, standings, round) {
   const apiKey = getApiKey();
   if (!apiKey) { showSetup(); throw new Error('No API key'); }
 
-  const today = new Date().toLocaleDateString('en-AU', {weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  const gameLines = games.map((g,i) => {
+    const modelTips = squiggleTips.filter(t => t.gameid === g.id);
+    let consensus = 'unknown', avgMargin = null;
+    if (modelTips.length) {
+      const counts = {};
+      modelTips.forEach(t => { if(t.tip) counts[t.tip] = (counts[t.tip]||0)+1; });
+      const top = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+      if (top) consensus = `${top[0]} ${top[1]}/${modelTips.length}`;
+      avgMargin = (modelTips.reduce((s,t)=>s+(parseFloat(t.margin)||0),0)/modelTips.length).toFixed(0);
+    }
+    return `G${i+1}:${g.hteam} v ${g.ateam}|${formatTime(g.date)}|${shortenVenue(g.venue)}|${consensus}${avgMargin?'|'+avgMargin+'pts':''}`;
+  }).join('\n');
 
-  const prompt = `Today is ${today}.
+  const ladder = (standings||[]).slice(0,10).map(s=>`${s.rank}.${s.team}`).join(' ');
 
-Fetch these 3 URLs and use the data to generate AFL tips:
-1. https://api.squiggle.com.au/?q=games;year=${YEAR}
-2. https://api.squiggle.com.au/?q=standings;year=${YEAR}
-
-From the games data, find the current round (earliest round with unplayed games as of today).
-Then fetch: https://api.squiggle.com.au/?q=tips;year=${YEAR};round=ROUND (replace ROUND with the round number).
-
-Using the Squiggle model consensus as primary signal and ladder position as tiebreaker, tip each unplayed game conservatively — favour the model consensus pick.
-
-Respond with ONLY this JSON, no other text, no markdown:
-{"round":1,"games":[{"home":"Team","away":"Team","tip":"Team","confidence":"High|Med|Low","reason":"under 10 words","time":"e.g. Sat 5 Apr 1:45pm","venue":"Venue"}],"game1_margin":14,"safest":[{"team":"Team","opp":"Team","reason":"word"},{"team":"Team","opp":"Team","reason":"word"},{"team":"Team","opp":"Team","reason":"word"}],"upset_watch":[{"matchup":"Team vs Team","reason":"one line"},{"matchup":"Team vs Team","reason":"one line"}],"itipfooty":[{"team":"Team","opp":"Team","conf":"H|M|L"}]}`;
+  const prompt = `AFL Round ${round} ${YEAR}. Squiggle model tips:\n${gameLines}\nLadder: ${ladder}\nTip each game using Squiggle consensus. Conservative — back favourites.\nJSON only:\n{"round":${round},"games":[{"home":"","away":"","tip":"","confidence":"High|Med|Low","reason":"<10 words","time":"","venue":""}],"game1_margin":0,"safest":[{"team":"","opp":"","reason":""},{"team":"","opp":"","reason":""},{"team":"","opp":"","reason":""}],"upset_watch":[{"matchup":"","reason":""},{"matchup":"","reason":""}],"itipfooty":[{"team":"","opp":"","conf":"H|M|L"}]}`;
 
   const r = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -839,9 +856,8 @@ Respond with ONLY this JSON, no other text, no markdown:
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-6',
-      max_tokens: 700,
-      tools: [{ type: 'web_fetch_20260309', name: 'web_fetch' }],
-      system: 'You are a JSON API. Fetch the requested URLs using your web_fetch tool, then output ONLY raw valid JSON. No text before or after. No markdown. No backticks.',
+      max_tokens: 600,
+      system: 'You are a JSON API. Output ONLY raw valid JSON. No text, no markdown, no backticks.',
       messages: [{ role: 'user', content: prompt }]
     })
   });
@@ -871,13 +887,34 @@ Respond with ONLY this JSON, no other text, no markdown:
 async function fetchTips() {
   if (!getApiKey()) { showSetup(); return; }
   renderSkeleton();
-  setStatus('Getting tips from Jezza\u2026', 'loading');
 
   try {
-    const tips = await fetchTipsFromClaude();
+    setStatus('Fetching Squiggle data\u2026', 'loading');
+    const [gamesData, standingsData] = await Promise.all([
+      squiggleFetch('q=games'),
+      squiggleFetch('q=standings')
+    ]);
+
+    const round = await getCurrentRound(gamesData.games||[]);
+    if (!round) throw new Error('No upcoming games found');
+
+    setStatus(`Round ${round} found \u2014 loading tips\u2026`, 'loading');
+    const tipsData = await squiggleFetch(`q=tips;round=${round}`);
+
+    const games = (gamesData.games||[]).filter(g => g.round===round && (!g.complete || g.complete < 100));
+    if (!games.length) {
+      setStatus('Round complete.', 'error');
+      document.getElementById('content').innerHTML = `<div class="empty-state"><div class="empty-icon">\uD83C\uDFC1</div><div class="empty-title">Round Complete</div><div class="empty-sub">All games played. Check back next round.</div></div>`;
+      return;
+    }
+
+    setStatus('Asking Jezza for tips\u2026', 'loading');
+    const tips = await claudeTips(games, tipsData.tips||[], standingsData.standings||[], round);
+
     setStatus(`Round ${tips.round} tips ready`, 'success');
-    render(tips, []);
+    render(tips, games);
     setTimeout(()=>setStatus(''), 3000);
+
   } catch(err) {
     console.error(err);
     setStatus('Error: ' + err.message, 'error');
