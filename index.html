@@ -1,0 +1,876 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Jezza5000">
+<meta name="theme-color" content="#0a0a0f">
+<title>Jezza5000</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #12121a;
+    --bg3: #1a1a26;
+    --card: #16161f;
+    --card-hover: #1e1e2e;
+    --border: rgba(255,255,255,0.07);
+    --border-bright: rgba(255,255,255,0.14);
+    --text: #f0f0f8;
+    --text-muted: #7a7a9a;
+    --text-dim: #4a4a6a;
+    --accent: #c8ff00;
+    --accent-dim: rgba(200,255,0,0.12);
+    --accent-glow: rgba(200,255,0,0.25);
+    --win: #c8ff00;
+    --win-bg: rgba(200,255,0,0.08);
+    --loss-bg: rgba(255,255,255,0.03);
+    --high: #c8ff00;
+    --med: #ffb800;
+    --low: #ff6b35;
+    --safe: #00e5a0;
+    --upset: #ff4d6d;
+    --radius: 16px;
+    --radius-sm: 10px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 15px;
+    line-height: 1.5;
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    padding-bottom: env(safe-area-inset-bottom);
+    overflow-x: hidden;
+  }
+
+  /* Background grid texture */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(200,255,0,0.015) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(200,255,0,0.015) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 0 16px 32px;
+  }
+
+  /* HEADER */
+  .header {
+    padding: 60px 0 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+  }
+
+  .wordmark {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px;
+    letter-spacing: 2px;
+    color: var(--text);
+    line-height: 1;
+  }
+
+  .wordmark span {
+    color: var(--accent);
+  }
+
+  .round-badge {
+    background: var(--accent);
+    color: #0a0a0f;
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 5px 10px;
+    border-radius: 6px;
+    letter-spacing: 0.05em;
+    margin-top: 6px;
+  }
+
+  .header-meta {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .header-meta .dot { color: var(--accent); }
+
+  /* FETCH BAR */
+  .fetch-bar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+  }
+
+  .btn {
+    flex: 1;
+    background: var(--bg3);
+    border: 1px solid var(--border-bright);
+    color: var(--text);
+    font-family: 'DM Sans', sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    padding: 12px 16px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    transition: all 0.2s;
+    -webkit-appearance: none;
+  }
+
+  .btn:active { transform: scale(0.97); background: var(--card-hover); }
+
+  .btn-primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #0a0a0f;
+    font-weight: 600;
+  }
+
+  .btn-primary:active { background: #a8d600; }
+
+  .btn svg { flex-shrink: 0; }
+
+  /* STATUS */
+  .status {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center;
+    margin-bottom: 20px;
+    min-height: 16px;
+    letter-spacing: 0.03em;
+  }
+
+  .status.loading { color: var(--accent); animation: pulse 1.5s ease-in-out infinite; }
+  .status.error { color: var(--low); }
+  .status.success { color: var(--safe); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+  /* SECTION LABEL */
+  .section-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    padding-left: 2px;
+  }
+
+  /* MATCH CARDS */
+  .matches { display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px; }
+
+  .match-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    transition: border-color 0.2s;
+  }
+
+  .match-card.is-game1 {
+    border-color: rgba(200,255,0,0.2);
+    box-shadow: 0 0 24px rgba(200,255,0,0.05);
+  }
+
+  .game1-tag {
+    background: var(--accent);
+    color: #0a0a0f;
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    font-weight: 500;
+    letter-spacing: 0.1em;
+    padding: 4px 10px;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .match-meta {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px 6px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .match-time {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .match-venue {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: right;
+    max-width: 60%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .match-teams {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    padding: 14px 14px 10px;
+    gap: 8px;
+  }
+
+  .team {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .team.home { align-items: flex-start; }
+  .team.away { align-items: flex-end; }
+
+  .team-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 22px;
+    letter-spacing: 0.5px;
+    line-height: 1;
+    color: var(--text-muted);
+    transition: color 0.2s;
+  }
+
+  .team-label {
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  .team.tipped .team-name {
+    color: var(--text);
+  }
+
+  .team.tipped .team-name::after {
+    content: ' ✓';
+    color: var(--accent);
+    font-size: 14px;
+  }
+
+  .team.home.tipped .team-name::after { content: ' ✓'; }
+  .team.away.tipped { }
+  .team.away.tipped .team-name::before {
+    content: '✓ ';
+    color: var(--accent);
+    font-size: 14px;
+  }
+  .team.away.tipped .team-name::after { content: ''; }
+
+  .vs {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: center;
+  }
+
+  /* CONFIDENCE + MARGIN ROW */
+  .match-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 14px 12px;
+    gap: 8px;
+  }
+
+  .confidence-pill {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.06em;
+    padding: 4px 9px;
+    border-radius: 20px;
+    text-transform: uppercase;
+  }
+
+  .conf-high { background: rgba(200,255,0,0.12); color: var(--high); border: 1px solid rgba(200,255,0,0.2); }
+  .conf-med  { background: rgba(255,184,0,0.1);  color: var(--med);  border: 1px solid rgba(255,184,0,0.2); }
+  .conf-low  { background: rgba(255,107,53,0.1); color: var(--low);  border: 1px solid rgba(255,107,53,0.2); }
+
+  .tip-label {
+    font-size: 12px;
+    color: var(--text-muted);
+    flex: 1;
+    text-align: center;
+  }
+
+  .tip-label strong { color: var(--text); font-weight: 500; }
+
+  .margin-pill {
+    background: var(--accent-dim);
+    border: 1px solid rgba(200,255,0,0.25);
+    color: var(--accent);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    font-weight: 500;
+    padding: 4px 9px;
+    border-radius: 20px;
+  }
+
+  /* SECTION CARDS */
+  .info-section { margin-bottom: 24px; }
+
+  .info-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .info-card-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 12px;
+  }
+
+  .info-row:last-child { border-bottom: none; }
+
+  .info-row-rank {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    width: 20px;
+    flex-shrink: 0;
+  }
+
+  .info-row-team {
+    font-weight: 500;
+    font-size: 14px;
+    flex: 1;
+  }
+
+  .info-row-opp {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .safe-badge {
+    background: rgba(0,229,160,0.1);
+    border: 1px solid rgba(0,229,160,0.2);
+    color: var(--safe);
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    padding: 3px 7px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  .upset-badge {
+    background: rgba(255,77,109,0.1);
+    border: 1px solid rgba(255,77,109,0.2);
+    color: var(--upset);
+    font-family: 'DM Mono', monospace;
+    font-size: 9px;
+    padding: 3px 7px;
+    border-radius: 20px;
+    white-space: nowrap;
+  }
+
+  .info-row-reason {
+    font-size: 12px;
+    color: var(--text-muted);
+    flex: 1;
+    text-align: right;
+  }
+
+  /* ITIPFOOTY */
+  .itip-row {
+    display: flex;
+    align-items: center;
+    padding: 11px 16px;
+    border-bottom: 1px solid var(--border);
+    gap: 10px;
+  }
+
+  .itip-row:last-child { border-bottom: none; }
+
+  .itip-check {
+    color: var(--accent);
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .itip-team { font-weight: 500; font-size: 14px; flex: 1; }
+
+  .itip-opp { font-size: 12px; color: var(--text-muted); }
+
+  /* LOADING SKELETON */
+  .skeleton {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 10px;
+  }
+
+  .skel-line {
+    height: 12px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--bg3) 25%, var(--bg2) 50%, var(--bg3) 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s ease-in-out infinite;
+    margin-bottom: 10px;
+  }
+
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  .skel-line.w80 { width: 80%; }
+  .skel-line.w60 { width: 60%; }
+  .skel-line.w40 { width: 40%; }
+
+  /* EMPTY / ERROR */
+  .empty-state {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--text-dim);
+  }
+
+  .empty-icon { font-size: 40px; margin-bottom: 12px; }
+  .empty-title { font-family: 'Bebas Neue', sans-serif; font-size: 24px; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 1px; }
+  .empty-sub { font-size: 13px; line-height: 1.6; }
+
+  /* FOOTER */
+  .footer {
+    text-align: center;
+    padding: 16px 0 8px;
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.04em;
+  }
+
+  /* FADE IN */
+  .fade-in { animation: fadeIn 0.4s ease forwards; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+  .stagger > * { opacity: 0; animation: fadeIn 0.35s ease forwards; }
+  .stagger > *:nth-child(1){animation-delay:0.05s}
+  .stagger > *:nth-child(2){animation-delay:0.1s}
+  .stagger > *:nth-child(3){animation-delay:0.15s}
+  .stagger > *:nth-child(4){animation-delay:0.2s}
+  .stagger > *:nth-child(5){animation-delay:0.25s}
+  .stagger > *:nth-child(6){animation-delay:0.3s}
+  .stagger > *:nth-child(7){animation-delay:0.35s}
+  .stagger > *:nth-child(8){animation-delay:0.4s}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="header">
+    <div class="header-top">
+      <div class="wordmark">JEZZA<span>5000</span></div>
+      <div id="round-badge" class="round-badge" style="display:none"></div>
+    </div>
+    <div class="header-meta">
+      <span id="last-updated">AFL Tipping Assistant</span>
+      <span class="dot">●</span>
+      <span>2026</span>
+    </div>
+  </header>
+
+  <div class="fetch-bar">
+    <button class="btn btn-primary" onclick="fetchTips()">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M13.5 8A5.5 5.5 0 112.5 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M13.5 4v4h-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Get Tips
+    </button>
+    <button class="btn" onclick="clearTips()">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M3 3l10 10M13 3L3 13" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      Clear
+    </button>
+  </div>
+
+  <div id="status" class="status"></div>
+  <div id="content"></div>
+
+  <footer class="footer">Powered by Squiggle + Claude · Jezza5000 v2</footer>
+
+</div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────────────────────────────────
+const SQUIGGLE_BASE = 'https://api.squiggle.com.au';
+const YEAR = 2026;
+
+// ── STATE ───────────────────────────────────────────────────────────────────
+let currentData = null;
+
+// ── HELPERS ─────────────────────────────────────────────────────────────────
+function setStatus(msg, type='') {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+
+function formatTime(dateStr) {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleString('en-AU', {
+      weekday:'short', month:'short', day:'numeric',
+      hour:'numeric', minute:'2-digit', hour12:true
+    });
+  } catch(e) { return dateStr; }
+}
+
+function shortenVenue(v) {
+  if (!v) return '';
+  const map = {
+    'Marvel Stadium': 'Marvel Stadium',
+    'MCG': 'MCG',
+    'Optus Stadium': 'Optus Stadium',
+    'Adelaide Oval': 'Adelaide Oval',
+    'Gabba': 'The Gabba',
+    'Sydney Cricket Ground': 'SCG',
+    'ENGIE Stadium': 'ENGIE Stadium',
+    'GMHBA Stadium': 'GMHBA Stadium',
+    'TIO Stadium': 'TIO Stadium',
+    'Norwood Oval': 'Norwood Oval',
+    'Manuka Oval': 'Manuka Oval',
+    'Mars Stadium': 'Mars Stadium',
+    'Cazaly\'s Stadium': 'Cazaly\'s',
+    'University of Tasmania Stadium': 'UTAS Stadium',
+  };
+  for (const [k,v2] of Object.entries(map)) {
+    if (v.includes(k)) return v2;
+  }
+  return v.length > 22 ? v.substring(0,20)+'…' : v;
+}
+
+// ── SQUIGGLE FETCH ───────────────────────────────────────────────────────────
+async function fetchSquiggle(endpoint) {
+  const url = `${SQUIGGLE_BASE}/?q=${endpoint};year=${YEAR}`;
+  const r = await fetch(url, { headers: { 'User-Agent': 'Jezza5000/2.0 (personal tipping app)' } });
+  if (!r.ok) throw new Error(`Squiggle ${r.status}`);
+  return r.json();
+}
+
+async function getCurrentRound() {
+  const data = await fetchSquiggle('games');
+  const games = data.games || [];
+  const now = new Date();
+  // Find games in the future or very recent (within 3 hours)
+  const upcoming = games.filter(g => {
+    if (!g.date) return false;
+    const gd = new Date(g.date);
+    return gd > new Date(now - 3*60*60*1000);
+  });
+  if (upcoming.length === 0) return null;
+  // Get the earliest upcoming round
+  const rounds = [...new Set(upcoming.map(g => g.round))].sort((a,b) => a-b);
+  return rounds[0];
+}
+
+// ── CLAUDE TIPS ──────────────────────────────────────────────────────────────
+async function getClaudeTips(games, squiggleTips, standings, round) {
+  // Build a clean data summary for Claude
+  const gamesText = games.map((g,i) => {
+    const tips = squiggleTips.filter(t => t.gameid === g.id);
+    const modelPick = tips.length > 0
+      ? (() => {
+          const counts = {};
+          tips.forEach(t => { if(t.tip) counts[t.tip] = (counts[t.tip]||0)+1; });
+          const winner = Object.entries(counts).sort((a,b)=>b[1]-a[1])[0];
+          return winner ? `${winner[0]} (${winner[1]}/${tips.length} models)` : 'No consensus';
+        })()
+      : 'No Squiggle data';
+    const margin = tips.length > 0
+      ? (tips.reduce((s,t) => s + (parseFloat(t.margin)||0), 0) / tips.length).toFixed(1)
+      : null;
+    return `Game ${i+1}: ${g.hteam} (home) vs ${g.ateam} (away) | ${formatTime(g.date)} | ${g.venue||'TBC'} | Squiggle: ${modelPick}${margin ? ` | Avg margin: ${margin}` : ''}`;
+  }).join('\n');
+
+  const standingsText = (standings||[]).slice(0,18).map(s =>
+    `#${s.rank} ${s.team} (W${s.wins} L${s.losses})`
+  ).join(', ');
+
+  const prompt = `You are Jezza5000, an AFL tipping expert. It is Round ${round} of the 2026 AFL season.
+
+Here are the upcoming games with Squiggle model data:
+${gamesText}
+
+Current ladder (top 18):
+${standingsText}
+
+Your task:
+1. For EACH game, provide: TIP (team name only), CONFIDENCE (High/Med/Low), and a SHORT reason (max 10 words).
+2. For Game 1 only, provide a MARGIN tip (number only, e.g. "14").
+3. List the top 3 SAFEST tips (team names only + one word reason each).
+4. List 2 UPSET WATCH games (team matchup + one line why it's risky).
+5. For iTipFooty (Dad's comp), list all tips: team name + confidence H/M/L only.
+
+Use bookmaker consensus as baseline. Heavy favourites should be tipped. Be conservative.
+
+Respond ONLY in this exact JSON format, no other text:
+{
+  "round": ${round},
+  "games": [
+    {"home": "Team", "away": "Team", "tip": "Team", "confidence": "High|Med|Low", "reason": "Short reason here", "margin": null},
+    ...
+  ],
+  "game1_margin": 14,
+  "safest": [
+    {"team": "Team", "opp": "Team", "reason": "word"},
+    {"team": "Team", "opp": "Team", "reason": "word"},
+    {"team": "Team", "opp": "Team", "reason": "word"}
+  ],
+  "upset_watch": [
+    {"matchup": "Team vs Team", "reason": "One line explanation"},
+    {"matchup": "Team vs Team", "reason": "One line explanation"}
+  ],
+  "itipfooty": [
+    {"team": "Team", "opp": "Team", "conf": "H|M|L"},
+    ...
+  ]
+}`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1000,
+      system: 'You are Jezza5000, an AFL tipping assistant. You respond ONLY with valid JSON, no preamble, no markdown, no backticks.',
+      messages: [{ role: 'user', content: prompt }]
+    })
+  });
+
+  if (!response.ok) throw new Error(`Claude API ${response.status}`);
+  const data = await response.json();
+  const text = data.content.map(c => c.text || '').join('').trim();
+  const clean = text.replace(/```json|```/g, '').trim();
+  return JSON.parse(clean);
+}
+
+// ── RENDER ───────────────────────────────────────────────────────────────────
+function render(tipsData, games) {
+  const content = document.getElementById('content');
+  const round = tipsData.round;
+
+  // Update header
+  const badge = document.getElementById('round-badge');
+  badge.textContent = `RND ${round}`;
+  badge.style.display = 'block';
+  document.getElementById('last-updated').textContent =
+    'Updated ' + new Date().toLocaleTimeString('en-AU', {hour:'numeric',minute:'2-digit',hour12:true});
+
+  let html = '';
+
+  // ── MATCH CARDS ──
+  html += `<div class="section-label">Round ${round} — Work Comp</div>`;
+  html += `<div class="matches stagger">`;
+
+  tipsData.games.forEach((g, i) => {
+    const isGame1 = i === 0;
+    const homeWins = g.tip === g.home;
+    const awayWins = g.tip === g.away;
+    const confClass = g.confidence === 'High' ? 'conf-high' : g.confidence === 'Med' ? 'conf-med' : 'conf-low';
+
+    // Find matching Squiggle game for venue/time
+    const sq = games[i] || {};
+
+    html += `<div class="match-card${isGame1 ? ' is-game1' : ''}">`;
+    if (isGame1) html += `<div class="game1-tag">★ Game 1 — Margin Tip Active</div>`;
+
+    html += `<div class="match-meta">
+      <span class="match-time">${formatTime(sq.date||'')}</span>
+      <span class="match-venue">${shortenVenue(sq.venue||'')}</span>
+    </div>`;
+
+    html += `<div class="match-teams">
+      <div class="team home${homeWins?' tipped':''}">
+        <span class="team-label">Home</span>
+        <span class="team-name">${g.home}</span>
+      </div>
+      <span class="vs">vs</span>
+      <div class="team away${awayWins?' tipped':''}">
+        <span class="team-label">Away</span>
+        <span class="team-name">${g.away}</span>
+      </div>
+    </div>`;
+
+    html += `<div class="match-footer">
+      <span class="confidence-pill ${confClass}">${g.confidence}</span>
+      <span class="tip-label"><strong>${g.tip}</strong> — ${g.reason}</span>
+      ${isGame1 && tipsData.game1_margin ? `<span class="margin-pill">by ${tipsData.game1_margin}</span>` : ''}
+    </div>`;
+
+    html += `</div>`;
+  });
+
+  html += `</div>`;
+
+  // ── SAFEST TIPS ──
+  html += `<div class="info-section fade-in">`;
+  html += `<div class="section-label">Safest Tips</div>`;
+  html += `<div class="info-card"><div class="info-card-header"><span>🔒</span> Lock these in</div>`;
+  tipsData.safest.forEach((s, i) => {
+    html += `<div class="info-row">
+      <span class="info-row-rank">${i+1}</span>
+      <span class="info-row-team">${s.team}</span>
+      <span class="info-row-opp">v ${s.opp}</span>
+      <span class="safe-badge">${s.reason}</span>
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  // ── UPSET WATCH ──
+  html += `<div class="info-section fade-in">`;
+  html += `<div class="section-label">Upset Watch</div>`;
+  html += `<div class="info-card"><div class="info-card-header"><span>⚠</span> Proceed with caution</div>`;
+  tipsData.upset_watch.forEach(u => {
+    html += `<div class="info-row">
+      <span class="info-row-team" style="font-size:13px">${u.matchup}</span>
+      <span class="upset-badge">risky</span>
+    </div>
+    <div style="padding:0 16px 10px;font-size:12px;color:var(--text-muted);border-bottom:1px solid var(--border)">${u.reason}</div>`;
+  });
+  html += `</div></div>`;
+
+  // ── ITIPFOOTY ──
+  html += `<div class="info-section fade-in">`;
+  html += `<div class="section-label">iTipFooty — Dad's Comp</div>`;
+  html += `<div class="info-card"><div class="info-card-header"><span>🏆</span> Keep the streak alive</div>`;
+  tipsData.itipfooty.forEach(t => {
+    const confClass = t.conf === 'H' ? 'conf-high' : t.conf === 'M' ? 'conf-med' : 'conf-low';
+    html += `<div class="itip-row">
+      <span class="itip-check">✓</span>
+      <span class="itip-team">${t.team}</span>
+      <span class="itip-opp">v ${t.opp}</span>
+      <span class="confidence-pill ${confClass}" style="font-size:9px;padding:3px 7px">${t.conf}</span>
+    </div>`;
+  });
+  html += `</div></div>`;
+
+  content.innerHTML = html;
+}
+
+function renderSkeleton() {
+  document.getElementById('content').innerHTML = `
+    <div class="skeleton"><div class="skel-line w80"></div><div class="skel-line w60"></div><div class="skel-line w40"></div></div>
+    <div class="skeleton"><div class="skel-line w80"></div><div class="skel-line w60"></div><div class="skel-line w40"></div></div>
+    <div class="skeleton"><div class="skel-line w80"></div><div class="skel-line w60"></div><div class="skel-line w40"></div></div>
+  `;
+}
+
+function clearTips() {
+  document.getElementById('content').innerHTML = '';
+  document.getElementById('status').textContent = '';
+  document.getElementById('round-badge').style.display = 'none';
+  document.getElementById('last-updated').textContent = 'AFL Tipping Assistant';
+}
+
+// ── MAIN FETCH FLOW ──────────────────────────────────────────────────────────
+async function fetchTips() {
+  renderSkeleton();
+  setStatus('Fetching fixtures from Squiggle…', 'loading');
+
+  try {
+    // Step 1: Get current round
+    setStatus('Identifying current round…', 'loading');
+    const round = await getCurrentRound();
+    if (!round) throw new Error('Could not determine current round');
+
+    // Step 2: Fetch games, tips and standings in parallel
+    setStatus(`Round ${round} found — loading data…`, 'loading');
+    const [gamesData, tipsData, standingsData] = await Promise.all([
+      fetchSquiggle(`games;round=${round}`),
+      fetchSquiggle(`tips;round=${round}`),
+      fetchSquiggle('standings')
+    ]);
+
+    const games = (gamesData.games || []).filter(g => {
+      // Only show games not yet complete
+      return !g.complete || g.complete < 100;
+    });
+
+    if (games.length === 0) {
+      setStatus('All games this round are complete.', 'error');
+      document.getElementById('content').innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🏁</div>
+          <div class="empty-title">Round Complete</div>
+          <div class="empty-sub">All games for this round have been played.<br>Check back when Round ${round+1} fixtures are released.</div>
+        </div>`;
+      return;
+    }
+
+    const squiggleTips = tipsData.tips || [];
+    const standings = standingsData.standings || [];
+
+    // Step 3: Ask Claude for tips
+    setStatus('Asking Jezza5000 for tips…', 'loading');
+    const claudeTips = await getClaudeTips(games, squiggleTips, standings, round);
+
+    // Step 4: Render
+    setStatus(`Round ${round} tips ready`, 'success');
+    render(claudeTips, games);
+    setTimeout(() => setStatus(''), 3000);
+
+  } catch(err) {
+    console.error(err);
+    setStatus('Error: ' + err.message, 'error');
+    document.getElementById('content').innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">⚡</div>
+        <div class="empty-title">Something went wrong</div>
+        <div class="empty-sub">${err.message}<br><br>Check your connection and try again.</div>
+      </div>`;
+  }
+}
+</script>
+</body>
+</html>
